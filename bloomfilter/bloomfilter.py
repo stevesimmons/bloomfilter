@@ -1,33 +1,55 @@
 import base64
 import math
 import random
+import struct
 import timeit
-from typing import List, Optional
+from typing import List, Optional, Union
+import uuid
 
 import numba
 import numpy as np
 
 class BloomFilter:        
-    def __init__(self, seeds: Optional[List[int]] = None, arr: Optional[bytearray] = None,
+    def __init__(self, data: Optional[bytearray] = None, seeds: Optional[List[int]] = None, arr: Optional[bytearray] = None,
                  size_bytes: Optional[int] = None, num_hashes: Optional[int] = None):
         """
         Recreate a bloomfilter from a list of uint32 seeds and an array of bytes.
         """
-        if arr is not None:
-            self.arr = np.array(arr, dtype='uint8')
-        elif size_bytes is not None:
-            self.arr = bytearray(size_bytes)
-        else:
-            raise ValueError("Specify either arr or size_bytes")
-        
-        if seeds is None and num_hashes is not None:
-            seeds = [random.getrandbits(32) for _ in range(num_hashes)]
-            #seeds = [random.randint(0, 0xFFFFFFFF) for _ in range(num_hashes)]
-        if seeds:
-            self.seeds = np.array(seeds, dtype='uint32')
-        else:
-            raise ValueError("Specify either seeds or num_hashes")
-        
+        if data is None:
+            # Build a single block with seeds and filter array
+            if seeds is None and num_hashes is not None:
+                seeds = [random.getrandbits(32) for _ in range(num_hashes)]
+                #seeds = [random.randint(0, 0xFFFFFFFF) for _ in range(num_hashes)]
+            if seeds:
+                seeds = np.array(seeds, dtype='uint32')
+                num_hashes = len(seeds)
+            else:
+                raise ValueError("Specify either seeds or num_hashes")
+
+            if arr is not None:
+                arr = np.array(arr, dtype='uint8')
+                size_bytes = len(arr)
+            elif size_bytes is None:
+                raise ValueError("Specify either arr or size_bytes")
+    
+            data = bytearray(4 * (1 + len(seeds)) + size_bytes)
+            if arr is None:
+                struct.pack_into(f'<I{len(seeds)}I', data, 0, len(seeds), *seeds)
+            else:
+                struct.pack_into(f'<I{len(seeds)}I{size_bytes}s', data, 0, len(seeds), *seeds, arr)
+        # Now unpack it with the arr as a writeable memoryview.
+        # This means the full state of the bloomfilter is in self.data.
+        self.data = data
+        self.num_hashes = int.from_bytes(data[0:4], byteorder='little')
+        self.seeds = np.ndarray(self.num_hashes, dtype='uint32', buffer=data[4: 4 * (self.num_hashes + 1)])
+        self.arr = memoryview(data)[4 * (self.num_hashes + 1):]
+
+    def __getstate__(self):
+        return self.data
+
+    def __setstate__(self, state):
+        self.__init__(data=state)
+    
     def capacity(self, false_positive_rate: float) -> int:
         "Max number of items in the filter to be within a designated false positive rate"
         bits_in_array = len(self.arr) * 8
@@ -44,7 +66,7 @@ class BloomFilter:
     
     @property
     def base64(self) -> str:
-        return base64.b64encode(self.arr)
+        return base64.b64encode(self.data)
     
     def add_string(self, s: str):
         "Add a string to the bloomfilter"
