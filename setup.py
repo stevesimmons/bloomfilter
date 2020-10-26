@@ -3,7 +3,7 @@ from pathlib import Path
 from setuptools import find_packages, setup
 
 # Package meta-data.
-NAME = "bloomfilter"
+NAME = "python-bloomfilter"
 DESCRIPTION = "Bloomfilter using numba to get performance close to C speed"
 URL = "http://github.com/stevesimmons/bloomfilter"
 EMAIL = "mail@stevesimmons.com"
@@ -39,7 +39,7 @@ setup(name=NAME,
       author_email=EMAIL,
       python_requires=REQUIRES_PYTHON,
       packages=find_packages(exclude=("tests",)),
-      package_data={"bloomfilter": ["VERSION"]},
+      package_data={"python-bloomfilter": ["VERSION"]},
       license='MIT Licence',
       install_requires=list_reqs(),
       include_package_data=True,
